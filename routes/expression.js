@@ -4,6 +4,8 @@ const { db, storage } = require('../db');
 const { authenticate } = require('../middlewares/authenticate');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
+const axios = require('axios');
+const FormData = require('form-data');
 
 // Set up multer to store files in memory
 const upload = multer({ storage: multer.memoryStorage() });
@@ -38,23 +40,38 @@ router.post('/detect-expression', authenticate, upload.single('image'), async (r
     fileStream.on('finish', async () => {
       const imageUrl = `https://storage.googleapis.com/${bucket.name}/${imageFileName}`;
 
-      // Dummy response
-      const detectedEmotion = 'Sad';
+      // Download image from Cloud Storage into a buffer
+      const [fileBuffer] = await file.download();
+
+      // Prepare form data to send to Flask server
+      const form = new FormData();
+      form.append('image', fileBuffer, {
+        filename: imageFileName,
+        contentType: imageFile.mimetype,
+      });
+      form.append('prediction_type', 'expression');
+
+      // Call Flask server for prediction
+      const flaskResponse = await axios.post('http://localhost:3000/predict-expression', form, {
+        headers: form.getHeaders(),
+      });
+
+      const detectedExpression = flaskResponse.data.prediction;
 
       // Save detection data to Firestore
       const docRef = db.collection('detectionHistory').doc();
       await docRef.set({
         detectionId: docRef.id,
         userId,
-        detectionType: 'emotion',
+        detectionType: 'expression',
         timestamp: timestamp || new Date().toISOString(),
         data: {
           imageUrl,
-          detectedEmotion,
+          detectedExpression,
         },
       });
 
-      res.status(200).json({ detectedEmotion, detectionId: docRef.id });
+      res.status(200).json({ detectedExpression, detectionId: docRef.id });
     });
 
     // Send file data to Cloud Storage

@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, jsonify
 import numpy as np
 from PIL import Image
 import tensorflow as tf
@@ -20,7 +20,7 @@ expression_output_details = expression_interpreter.get_output_details()
 expression_input_shape = expression_input_details[0]['shape']
 expression_input_height, expression_input_width = expression_input_shape[1], expression_input_shape[2]
 
-expression_labels = ['Angry', 'Fear', 'Happy', 'Neutral', 'Sad', 'Suprise']
+expression_labels = ['Angry', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
 
 # Muat model TensorFlow Lite untuk handsign
 handsign_interpreter = tf.lite.Interpreter(model_path="./handsign_model.tflite")
@@ -41,42 +41,55 @@ def preprocess_image(image_path, input_height, input_width):
     image = np.expand_dims(image, axis=0)  # Menambahkan dimensi batch
     return image
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        if 'imagefile' not in request.files or 'prediction_type' not in request.form:
-            return render_template('index.html', prediction='No file uploaded or prediction type not specified')
+@app.route('/predict-expression', methods=['POST'])
+def predict_expression():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image provided'}), 400
 
-        imagefile = request.files['imagefile']
-        if imagefile.filename == '':
-            return render_template('index.html', prediction='No file selected')
+    imagefile = request.files['image']
+    if imagefile.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
 
-        prediction_type = request.form['prediction_type']
-        image_path = os.path.join(app.config['UPLOAD_FOLDER'], imagefile.filename)
-        imagefile.save(image_path)
+    image_path = os.path.join(app.config['UPLOAD_FOLDER'], imagefile.filename)
+    imagefile.save(image_path)
 
-        if prediction_type == 'expression':
-            image = preprocess_image(image_path, expression_input_height, expression_input_width)
-            expression_interpreter.set_tensor(expression_input_details[0]['index'], image)
-            expression_interpreter.invoke()
-            output_data = expression_interpreter.get_tensor(expression_output_details[0]['index'])
-            predicted_label_index = np.argmax(output_data)
-            predicted_label = expression_labels[predicted_label_index]
-            accuracy = output_data[0][predicted_label_index] * 100
-            classification = f'Predicted expression: {predicted_label} with accuracy: {accuracy:.2f}%'
-        elif prediction_type == 'handsign':
-            image = preprocess_image(image_path, handsign_input_height, handsign_input_width)
-            handsign_interpreter.set_tensor(handsign_input_details[0]['index'], image)
-            handsign_interpreter.invoke()
-            output_data = handsign_interpreter.get_tensor(handsign_output_details[0]['index'])
-            predicted_label_index = np.argmax(output_data)
-            predicted_label = handsign_labels[predicted_label_index]
-            accuracy = output_data[0][predicted_label_index] * 100
-            classification = f'Predicted handsign: {predicted_label} with accuracy: {accuracy:.2f}%'
+    try:
+        image = preprocess_image(image_path, expression_input_height, expression_input_width)
+        expression_interpreter.set_tensor(expression_input_details[0]['index'], image)
+        expression_interpreter.invoke()
+        output_data = expression_interpreter.get_tensor(expression_output_details[0]['index'])
+        predicted_label_index = np.argmax(output_data)
+        predicted_label = expression_labels[predicted_label_index]
+        accuracy = output_data[0][predicted_label_index] * 100
+        classification = f'Predicted expression: {predicted_label}, with accuracy: {accuracy:.2f}%'
+        return jsonify({'prediction': classification})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-        return render_template('index.html', prediction=classification, image_url=imagefile.filename)
-    else:
-        return render_template('index.html')
+@app.route('/detect-sign-language', methods=['POST'])
+def detect_sign_language():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image provided'}), 400
+
+    imagefile = request.files['image']
+    if imagefile.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    image_path = os.path.join(app.config['UPLOAD_FOLDER'], imagefile.filename)
+    imagefile.save(image_path)
+
+    try:
+        image = preprocess_image(image_path, handsign_input_height, handsign_input_width)
+        handsign_interpreter.set_tensor(handsign_input_details[0]['index'], image)
+        handsign_interpreter.invoke()
+        output_data = handsign_interpreter.get_tensor(handsign_output_details[0]['index'])
+        predicted_label_index = np.argmax(output_data)
+        predicted_label = handsign_labels[predicted_label_index]
+        accuracy = output_data[0][predicted_label_index] * 100
+        classification = f'Predicted handsign: {predicted_label}, with accuracy: {accuracy:.2f}%'
+        return jsonify({'prediction': classification})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     if not os.path.exists(UPLOAD_FOLDER):
