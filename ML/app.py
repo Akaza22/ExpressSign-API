@@ -2,13 +2,9 @@ from flask import Flask, request, jsonify
 import numpy as np
 from PIL import Image
 import tensorflow as tf
-import os
+import io
 
 app = Flask(__name__)
-
-# Setel direktori untuk menyimpan gambar yang diunggah
-UPLOAD_FOLDER = './images'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Muat model TensorFlow Lite untuk ekspresi wajah
 expression_interpreter = tf.lite.Interpreter(model_path="./model.tflite")
@@ -34,8 +30,8 @@ handsign_input_height, handsign_input_width = handsign_input_shape[1], handsign_
 
 handsign_labels = [chr(i) for i in range(ord('A'), ord('Z')+1)]
 
-def preprocess_image(image_path, input_height, input_width):
-    image = Image.open(image_path).resize((input_width, input_height))
+def preprocess_image(image_file, input_height, input_width):
+    image = Image.open(image_file).resize((input_width, input_height))
     image = np.array(image).astype(np.float32)
     image = (image / 255.0) if 'dtype' in expression_input_details[0] and expression_input_details[0]['dtype'] == np.float32 else image
     image = np.expand_dims(image, axis=0)  # Menambahkan dimensi batch
@@ -50,18 +46,15 @@ def predict_expression():
     if imagefile.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    image_path = os.path.join(app.config['UPLOAD_FOLDER'], imagefile.filename)
-    imagefile.save(image_path)
-
     try:
-        image = preprocess_image(image_path, expression_input_height, expression_input_width)
+        image = preprocess_image(io.BytesIO(imagefile.read()), expression_input_height, expression_input_width)
         expression_interpreter.set_tensor(expression_input_details[0]['index'], image)
         expression_interpreter.invoke()
         output_data = expression_interpreter.get_tensor(expression_output_details[0]['index'])
         predicted_label_index = np.argmax(output_data)
         predicted_label = expression_labels[predicted_label_index]
         accuracy = output_data[0][predicted_label_index] * 100
-        classification = f'Predicted expression: {predicted_label}, with accuracy: {accuracy:.2f}%'
+        classification = f'{predicted_label}'
         return jsonify({'prediction': classification})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -75,23 +68,18 @@ def detect_sign_language():
     if imagefile.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    image_path = os.path.join(app.config['UPLOAD_FOLDER'], imagefile.filename)
-    imagefile.save(image_path)
-
     try:
-        image = preprocess_image(image_path, handsign_input_height, handsign_input_width)
+        image = preprocess_image(io.BytesIO(imagefile.read()), handsign_input_height, handsign_input_width)
         handsign_interpreter.set_tensor(handsign_input_details[0]['index'], image)
         handsign_interpreter.invoke()
         output_data = handsign_interpreter.get_tensor(handsign_output_details[0]['index'])
         predicted_label_index = np.argmax(output_data)
         predicted_label = handsign_labels[predicted_label_index]
         accuracy = output_data[0][predicted_label_index] * 100
-        classification = f'Predicted handsign: {predicted_label}, with accuracy: {accuracy:.2f}%'
+        classification = f'{predicted_label}'
         return jsonify({'prediction': classification})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
     app.run(port=3000, debug=True)
