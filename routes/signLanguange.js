@@ -56,22 +56,22 @@ router.post('/detect-sign-language', authenticate, upload.single('image'), async
         headers: form.getHeaders(),
       });
 
-      const detectedExpression = flaskResponse.data.prediction;
+      const detectedSignLanguange = flaskResponse.data.prediction;
 
       // Save detection data to Firestore
       const docRef = db.collection('detectionHistory').doc();
       await docRef.set({
         detectionId: docRef.id,
         userId,
-        detectionType: 'expression',
+        detectionType: 'Sign Languange',
         timestamp: timestamp || new Date().toISOString(),
         data: {
           imageUrl,
-          detectedExpression,
+          detectedSignLanguange,
         },
       });
 
-      res.status(200).json({ detectedExpression, detectionId: docRef.id });
+      res.status(200).json({ detectedSignLanguange });
     });
 
     // Send file data to Cloud Storage

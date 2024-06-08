@@ -34,7 +34,7 @@ router.delete('/delete-detection/:id', authenticate, async (req, res) => {
     // Delete the detection record from Firestore
     await detectionRef.delete();
 
-    res.status(200).send({ message: 'Detection and image deleted successfully' });
+    res.status(200).send({ message: 'Detection deleted successfully' });
   } catch (error) {
     console.error('Error deleting detection:', error);
     res.status(500).send({ error: 'Unable to delete detection' });

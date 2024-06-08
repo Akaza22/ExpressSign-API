@@ -71,7 +71,7 @@ router.post('/detect-expression', authenticate, upload.single('image'), async (r
         },
       });
 
-      res.status(200).json({ detectedExpression, detectionId: docRef.id });
+      res.status(200).json({ detectedExpression });
     });
 
     // Send file data to Cloud Storage
